@@ -1,0 +1,115 @@
+import discord
+from discord import app_commands, Webhook
+import random
+import datetime
+import aiohttp
+import os
+
+intents = discord.Intents.all()
+client = discord.Client(intents=intents)
+tree = app_commands.CommandTree(client)
+
+TOKEN = os.getenv("DISCORD_BOT_TOKEN")
+WEBHOOK_URL = os.getenv("TWEET_WEBHOOK_URL")
+AVATAR_URL = os.getenv("TWEET_AVATAR_URL")
+
+@client.event
+async def on_ready():
+    print(f"✅ Logged in as {client.user}")
+    await client.change_presence(activity=discord.Game(name="LYX is here!"))
+    await tree.sync()
+    print("✅ Slash commands synced")
+
+@client.event
+async def on_member_join(member):
+    channel = discord.utils.get(member.guild.text_channels, name="〢𝐖𝐞𝐥𝐜𝐨𝐦𝐞")
+    if channel:
+        await channel.send(f"〢𝐖𝐞𝐥𝐜𝐨𝐦𝐞 {member.mention} to {member.guild.name}!")
+
+    role = discord.utils.get(member.guild.roles, name="𝐋𝐘𝐗")
+    if role:
+        await member.add_roles(role)
+
+@tree.command(name="ping", description="عرض سرعة استجابة البوت")
+async def ping(interaction: discord.Interaction):
+    latency = round(client.latency * 1000)
+    await interaction.response.send_message(f"🏓 Pong! {latency}ms")
+
+@tree.command(name="clear", description="حذف عدد من الرسائل")
+@app_commands.describe(amount="عدد الرسائل المراد حذفها")
+async def clear(interaction: discord.Interaction, amount: int):
+    if interaction.user.guild_permissions.manage_messages:
+        await interaction.channel.purge(limit=amount)
+        await interaction.response.send_message(f"🧹 تم حذف {amount} رسالة", ephemeral=True)
+    else:
+        await interaction.response.send_message("❌ لا تملك صلاحية حذف الرسائل", ephemeral=True)
+
+@tree.command(name="ban", description="حظر عضو من السيرفر")
+@app_commands.describe(member="العضو", reason="سبب الحظر")
+async def ban(interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
+    if interaction.user.guild_permissions.ban_members:
+        await member.ban(reason=reason)
+        await interaction.response.send_message(f"🔨 تم حظر {member.name} | السبب: {reason}")
+    else:
+        await interaction.response.send_message("❌ لا تملك صلاحية الحظر", ephemeral=True)
+
+@client.event
+async def on_message(message):
+    if message.author.bot:
+        return
+
+    if message.channel.name == "〢𝐓𝐰𝐞𝐞𝐭𝐬":
+        try:
+            async with aiohttp.ClientSession() as session:
+                webhook = Webhook.from_url(WEBHOOK_URL, session=session)
+
+                embed = discord.Embed(
+                    description=message.content,
+                    color=discord.Color.dark_gray()
+                )
+                embed.set_author(name=message.author.name, icon_url=message.author.display_avatar.url)
+
+                if message.attachments:
+                    embed.set_image(url=message.attachments[0].url)
+
+                days_ar = {
+                    "Saturday": "السبت",
+                    "Sunday": "الأحد",
+                    "Monday": "الإثنين",
+                    "Tuesday": "الثلاثاء",
+                    "Wednesday": "الأربعاء",
+                    "Thursday": "الخميس",
+                    "Friday": "الجمعة"
+                }
+                today_en = datetime.datetime.utcnow().strftime('%A')
+                today_ar = days_ar.get(today_en, today_en)
+                embed.set_footer(text=f"Calm • {today_ar}")
+
+                await webhook.send(
+                    embed=embed,
+                    username="LYX Tweets",
+                    avatar_url=AVATAR_URL,
+                    allowed_mentions=discord.AllowedMentions.none()
+                )
+
+            await message.delete()
+
+            async for msg in message.channel.history(limit=5):
+                if msg.author.bot and msg.embeds and msg.embeds[0].description == message.content:
+                    await msg.add_reaction("🔁")
+                    await msg.add_reaction("✅")
+                    break
+
+        except Exception as e:
+            print(f"❌ خطأ في التغريدة: {e}")
+        return
+
+    if message.content == ".":
+        responses = ["هلا قلبي", "يا مرحباا", "نورت يابعدهم", "هلا والله", "حيالله من جانا"]
+        await message.channel.send(random.choice(responses))
+    elif message.content.lower() == "السلام عليكم":
+        await message.channel.send("وعليكم السلام ❤️")
+    elif message.content.lower() == "هاي":
+        await message.channel.send("هلا وغلا يبعدهم 🌸")
+
+client.run(TOKEN)
